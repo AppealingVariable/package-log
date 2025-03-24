@@ -45,17 +45,39 @@ def create_table():
 
 def check_in(package_dict):
     sql_insert = '''INSERT INTO package_log (delivered_by, apartment, barcode_scan, package_status) VALUES (:delivered_by, :apartment, :barcode_scan, :package_status)'''
-    cursor.execute(sql_insert, package_dict)
+    if 'package_count' in package_dict:
+        for i in range(int(package_dict['package_count'])):
+            cursor.execute(sql_insert, package_dict)
+    else:
+        cursor.execute(sql_insert, package_dict)
     sqlite_connection.commit()
+    return True
 
-def check_out(barcode):
+def check_out_barcode(barcode):
     update_cursor = sqlite_connection.cursor()
     update_cursor.execute("SELECT * FROM package_log WHERE check_out_time IS NULL AND barcode_scan=? ", (barcode,))
-
     update_cursor.execute('''UPDATE package_log SET check_out_time = CURRENT_TIMESTAMP, package_status = 1 WHERE check_out_time IS NULL AND barcode_scan=?''', (barcode,))
-    update_cursor.execute("SELECT * FROM package_log WHERE barcode_scan=? ", (barcode,))
-
     sqlite_connection.commit()
+    return True
+
+def check_out_manual(package_info):
+    check_out_cursor = sqlite_connection.cursor()
+    sql_expression = f"UPDATE package_log SET check_out_time = CURRENT_TIMESTAMP, package_status = 1 WHERE check_out_time IS NULL AND check_in_time IS '{package_info[0]}' AND apartment IS '{package_info[1]}' AND barcode_scan IS '{package_info[2]}'; "
+    #check_out_cursor.execute("SELECT * FROM package_log WHERE check_out_time IS NULL AND check_in_time=? AND apartment=? ", (barcode,))
+    check_out_cursor.execute(sql_expression)
+    sqlite_connection.commit()
+    return True
+
+def manual_check_out_db_search(search_dict):
+    sql_search_expression = f"SELECT * FROM package_log WHERE apartment = '{search_dict['apartment']}' AND package_status = 0 ORDER BY check_in_time; "
+    search_cursor = sqlite_connection.cursor()
+    search_cursor.execute(sql_search_expression)
+    #output_temp_file(search_cursor)
+    results_list = []
+    for row in search_cursor:
+        formatted_row = [row[0], row[3], row[4], row[2]]
+        results_list.append(formatted_row)
+    return results_list
 
 def db_search(search_dict):         #check_in_time, check_out_time, delivered_by, apartment, barcode_scan, package_status:
     sql_search_expression = "SELECT * FROM package_log WHERE "
@@ -98,12 +120,20 @@ def db_manual_report(report_dict):
 
 
 def count_received_by_apartment_date_range(count_dict):
-    sql_count_expression = f'''SELECT apartment
-    , COUNT(*) AS Total
-    , COUNT(package_status) FILTER (WHERE package_status = 0) AS Onhand
-    , COUNT(package_status) FILTER (WHERE package_status = 1) AS Delivered
-    , COUNT(package_status) FILTER (WHERE package_status = 2) AS Missing
-    FROM package_log WHERE date(check_in_time) BETWEEN '{count_dict['check_in_time_start']}' AND '{count_dict['check_in_time_end']}' GROUP BY apartment ORDER BY apartment; '''
+    if count_dict['apartment'] == '':
+        sql_count_expression = f'''SELECT apartment
+        , COUNT(*) AS Total
+        , COUNT(package_status) FILTER (WHERE package_status = 0) AS Onhand
+        , COUNT(package_status) FILTER (WHERE package_status = 1) AS Delivered
+        , COUNT(package_status) FILTER (WHERE package_status = 2) AS Missing
+        FROM package_log WHERE date(check_in_time) BETWEEN '{count_dict['check_in_time_start']}' AND '{count_dict['check_in_time_end']}' GROUP BY apartment ORDER BY apartment; '''
+    else:
+        sql_count_expression = f'''SELECT apartment
+        , COUNT(*) AS Total
+        , COUNT(package_status) FILTER (WHERE package_status = 0) AS Onhand
+        , COUNT(package_status) FILTER (WHERE package_status = 1) AS Delivered
+        , COUNT(package_status) FILTER (WHERE package_status = 2) AS Missing
+        FROM package_log WHERE apartment IS '{count_dict['apartment']}' AND date(check_in_time) BETWEEN '{count_dict['check_in_time_start']}' AND '{count_dict['check_in_time_end']}' GROUP BY apartment ORDER BY apartment; '''
     function_cursor = sqlite_connection.cursor()
     function_cursor.execute(sql_count_expression)
     output_temp_file(function_cursor)
