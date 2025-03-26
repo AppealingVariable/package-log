@@ -11,14 +11,10 @@ carriers_dict = {0: 'Amazon',
                  6: ''
                  }
 
-
-
 def main_menu():
     packagelog.db_connect()
 
-    layout = [[sg.Button('Manual Check In'), sg.Button('Manual Check Out'), sg.Button('On Hand Search'), sg.Button('Manual Reports'), sg.Button('Counts by Check in Date'), sg.Button('All Onhand Counts'),sg.Exit() ]]
-    #uncomment below and comment above to enable barcode features *EXPERIMENTAL*
-    #layout = [[sg.Button('Check In'), sg.Button('Check Out'), sg.Button('Manual Check In'), sg.Button('Manual Check Out'), sg.Button('Search'), sg.Button('Manual Reports'), sg.Button('Counts by Check in Date'), sg.Button('All Onhand Counts'),sg.Exit() ]]
+    layout = [[sg.Button('Manual Check In'), sg.Button('Manual Check Out'), sg.Button('On Hand Search'), sg.Button('Manual Reports'), sg.Button('Counts by Check in Date'), sg.Button('All Counts'), sg.Button('Mark As Mistake or Missing'), sg.Exit() ]]
     window = sg.Window('Package Log Main Menu', layout, use_ttk_buttons=True, resizable=True).Finalize()
     window.Maximize()
     while True:                             # The Event Loop
@@ -37,9 +33,10 @@ def main_menu():
             manual_reports_gui()
         if event == 'Counts by Check in Date':
             counts_by_apartment_date_range_gui()
-        if event == 'All Onhand Counts':
-            #packagelog.all_onhand_count()
+        if event == 'All Counts':
             count_all_gui()
+        if event == 'Mark As Mistake or Missing':
+            mark_as_error_gui()
         if event == sg.WIN_CLOSED or event == 'Exit':
             packagelog.db_close()
             break
@@ -104,8 +101,8 @@ def manual_check_out_gui():
     data = []
     headings = ['Check in time', 'Apartment', 'Barcode', 'Carrier']
     layout = [[sg.Text('Manual Check Out')],
-              [sg.Button('Load list', bind_return_key = True), sg.Text('Apartment'), sg.Input(key='apartment')],
-              [sg.Table(values=data, headings=headings, max_col_width=25, background_color='darkblue',
+              [sg.Button('Select All'), sg.Button('Load list', bind_return_key = True), sg.Text('Apartment'), sg.Input(key='apartment')],
+              [sg.Table(values=data, headings=headings, def_col_width=30, max_col_width=50, background_color='darkblue',
                         auto_size_columns=False,
                         display_row_numbers=False,
                         num_rows=20,
@@ -118,18 +115,75 @@ def manual_check_out_gui():
     while True:                             # The Event Loop
         event, values = window.read()
         if event == 'Load list':
-            data = packagelog.db_search_on_hand(values)
-            window['-TABLE-'].update(values=data)
+            if values['apartment'] != '':
+                data = packagelog.db_search_on_hand(values)
+                window['-TABLE-'].update(values=data)
+        if event == 'Select All':
+            selected_rows = []
+            for i in range(len(data)):
+                selected_rows.append(i)
+            if selected_rows != []:
+                window['-TABLE-'].update(select_rows=selected_rows)
 
         if event == 'Manual Check Out':
             row_count = 0
+            error_count = 0
             for row in values['-TABLE-']:
-                packagelog.check_out_manual(data[row])
+                if not packagelog.check_out_manual(data[row]):
+                    error_message(f"Package {data[row]} did not check out correctly. Please try again and report to IT if the error persists.")
+                    error_count += 1
                 row_count += 1
             package_plural = 'packages'
-            if row_count == 1:
+            checked_out_count = row_count - error_count
+            if checked_out_count == 1:
                 package_plural = 'package'
-            sg.popup_quick_message(f"{row_count} {package_plural} checked out for apartment {data[0][1]}",
+            sg.popup_quick_message(f"{checked_out_count} {package_plural} checked out for apartment {data[0][1]}",
+                                   background_color="white", text_color='black')
+            data = packagelog.db_search_on_hand(values)
+            window['-TABLE-'].update(values=data)
+        if event == sg.WIN_CLOSED or event == 'Exit':
+            break
+    window.close()
+
+
+def mark_as_error_gui():
+    data = []
+    headings = ['Check in time', 'Apartment', 'Barcode', 'Carrier']
+    layout = [[sg.Text('Mark As Mistake')],
+              [sg.Button('Load list', bind_return_key = True), sg.Text('Apartment'), sg.Input(key='apartment')],
+              [sg.Table(values=data, headings=headings, def_col_width=30, max_col_width=50, background_color='darkblue',
+                        auto_size_columns=False,
+                        display_row_numbers=False,
+                        num_rows=20,
+                        key='-TABLE-')],
+              [sg.Button('Mark As Mistake'), sg.Button('Mark As Missing')]
+              ]
+    window = sg.Window('Mark As Mistake', layout, use_ttk_buttons=True, modal=True).Finalize()
+    window['apartment'].set_focus()
+
+    while True:                             # The Event Loop
+        event, values = window.read()
+        if event == 'Load list':
+            data = packagelog.db_search_on_hand(values)
+            window['-TABLE-'].update(values=data)
+        print(event)
+        if event == 'Mark As Mistake' or event == 'Mark As Missing':
+            row_count = 0
+            error_count = 0
+            if event == 'Mark As Missing':
+                status_change = 2
+            else:
+                status_change = 3
+            for row in values['-TABLE-']:
+                if not packagelog.mark_as_error(package_info=data[row], status_update=status_change):
+                    error_message(f"Package {data[row]} status not updated. Please try again and report to IT if the error persists.")
+                    error_count += 1
+                row_count += 1
+            package_plural = 'packages'
+            checked_out_count = row_count - error_count
+            if checked_out_count == 1:
+                package_plural = 'package'
+            sg.popup_quick_message(f"{checked_out_count} {package_plural} marked {packagelog.status_dict[status_change]} for apartment {data[0][1]}",
                                    background_color="white", text_color='black')
             data = packagelog.db_search_on_hand(values)
             window['-TABLE-'].update(values=data)
@@ -143,14 +197,15 @@ def on_hand_search_gui():
     headings = ['Check in time', 'Apartment', 'Barcode', 'Carrier']
     layout = [[sg.Text('Search by apartment')],
               [sg.Button('Load list', bind_return_key = True), sg.Text('Apartment'), sg.Input(key='apartment')],
-              [sg.Table(values=data, headings=headings, max_col_width=25, background_color='darkblue',
+              [sg.Table(values=data, headings=headings, def_col_width=30, max_col_width=50, background_color='darkblue',
                         auto_size_columns=False,
                         display_row_numbers=False,
                         num_rows=20,
                         key='-TABLE-')],
               [sg.Text('Total'), sg.Text('0', key='total_value')]
               ]
-    window = sg.Window('Search', layout, use_ttk_buttons=True, modal=True)
+    window = sg.Window('Search', layout, use_ttk_buttons=True, modal=True).Finalize()
+    window['apartment'].set_focus()
 
     while True:                             # The Event Loop
         event, values = window.read()
@@ -166,6 +221,7 @@ def manual_reports_gui():
     combo_dict_conversion = {'Checked In': 0,
                              'Checked Out': 1,
                              'Missing': 2,
+                             'Mistake': 3,
                              'All': ''}
     data = []
     headings = ['Apartment', 'Check In Time', 'Check Out Time', 'Carrier', 'Status']
@@ -188,7 +244,7 @@ def manual_reports_gui():
                sg.Input(key='check_out_time_start')],
               [sg.CalendarButton(button_text='Check Out Date End', format="%Y-%m-%d", key='date_dummy'),
                sg.Input(key='check_out_time_end')],
-              [sg.Text('Package Status'), sg.Combo(['Checked In', 'Checked Out', 'Missing', 'All'], default_value='All', readonly=True,
+              [sg.Text('Package Status'), sg.Combo(['Checked In', 'Checked Out', 'Missing', 'Mistake', 'All'], default_value='All', readonly=True,
                         key='status')],
               [sg.Button('Load list', bind_return_key = True)],
               [sg.Table(values=data, headings=headings, def_col_width = 20, max_col_width=50, background_color='darkblue',
@@ -229,11 +285,10 @@ def manual_reports_gui():
                                 check_in_time_end=values['check_in_time_end'],
                                 check_out_time_start=values['check_out_time_start'],
                                 check_out_time_end=values['check_out_time_end'],
-                                apartment=values['apartment'],
+                                apartment=values['apartment'].upper(),
                                 delivered_by=carrier_value,
                                 barcode_scan=values['barcode_scan'],
                                 package_status=combo_dict_conversion[values['status']])
-            #packagelog.db_manual_report(package_info)
             data = packagelog.db_manual_report(package_info)
             window['-TABLE-'].update(values=data)
             window['total_value'].update(value=len(data))
@@ -243,7 +298,7 @@ def manual_reports_gui():
     window.close()
 
 def counts_by_apartment_date_range_gui():
-    counts_header = ['Apartment', 'Onhand', 'Delivered', 'Missing', 'Total']
+    counts_header = ['Apartment', 'Onhand', 'Delivered', 'Missing', 'Mistake', 'Total']
     data = []
     layout = [[sg.Text('Counts by apartment, leave apartment blank to view all')],
               [sg.CalendarButton(button_text='Check In Date Start', format="%Y-%m-%d", key='date_dummy'),
@@ -252,7 +307,7 @@ def counts_by_apartment_date_range_gui():
                sg.Input(key='check_in_time_end', default_text=packagelog.today_date_string())],
               [sg.Text('Apartment Number'), sg.Input(key='apartment')],
               [sg.Button('Load List', bind_return_key = True)],
-              [sg.Table(values=data, headings=counts_header, def_col_width=20, max_col_width=50, background_color='darkblue',
+              [sg.Table(values=data, headings=counts_header, def_col_width=30, max_col_width=50, background_color='darkblue',
                         auto_size_columns=False,
                         display_row_numbers=False,
                         justification="left",
@@ -261,7 +316,8 @@ def counts_by_apartment_date_range_gui():
               [sg.Button('Save Report'), sg.Exit()]
               ]
 
-    window = sg.Window('Counts by Check in Date', layout, use_ttk_buttons=True, modal=True)
+    window = sg.Window('Counts by Check in Date', layout, use_ttk_buttons=True, modal=True).Finalize()
+    window['apartment'].set_focus()
 
     while True:  # The Event Loop
         event, values = window.read()
@@ -296,11 +352,11 @@ def counts_by_apartment_date_range_gui():
     window.close()
 
 def count_all_gui():
-    counts_header = ['Apartment', 'Onhand', 'Delivered', 'Missing', 'Total']
+    counts_header = ['Apartment', 'Onhand', 'Delivered', 'Missing', 'Mistake', 'Total']
     data = []
-    layout = [
+    layout = [[sg.Text("Shows current counts of all records")],
               [sg.Button('Load Onhand Counts'), sg.Button('Load All Counts')],
-              [sg.Table(values=data, headings=counts_header, def_col_width=20, max_col_width=50, background_color='darkblue',
+              [sg.Table(values=data, headings=counts_header, def_col_width=30, max_col_width=50, background_color='darkblue',
                         auto_size_columns=False,
                         display_row_numbers=False,
                         justification="left",

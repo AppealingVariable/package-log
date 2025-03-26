@@ -2,14 +2,13 @@ import sqlite3
 import csv
 import time
 import datetime
-import os
 import subprocess
-import random
 
 # package_statuses:
 # 0 = checked in/on-hand
 # 1 = checked out/given to resident
 # 2 = checked in, missing
+# 3 = entered in error
 
 #GLOBAL VARIABLES
 db_name = 'package-log.db'
@@ -21,7 +20,8 @@ cursor = sqlite_connection.cursor()
 status_dict = {
     0: "Checked In",
     1: "Checked Out",
-    2: "Missing"
+    2: "Missing",
+    3: "Mistake"
 }
 ##################################
 def error_logging(message):
@@ -38,8 +38,6 @@ def today_date_string():
 def db_connect():
     global sqlite_connection
     global cursor
-    # sqlite_connection = sqlite3.connect(db_name)
-    # cursor = sqlite_connection.cursor()
     cursor.execute("""SELECT name FROM sqlite_master WHERE type='table' AND name='package_log';""")
     if cursor.fetchone() is not None:
         pass
@@ -82,17 +80,36 @@ def check_out_barcode(barcode):
     return True
 
 def check_out_manual(package_info):
-    check_out_cursor = sqlite_connection.cursor()
-    #sql_expression = f"UPDATE package_log SET check_out_time = CURRENT_TIMESTAMP, package_status = 1 WHERE check_out_time IS NULL AND check_in_time IS '{package_info[0]}' AND apartment IS '{package_info[1].upper()}' AND barcode_scan IS '{package_info[2]}'; "
-    sql_expression = f"UPDATE package_log SET check_out_time = CURRENT_TIMESTAMP, package_status = 1 WHERE check_out_time IS NULL AND barcode_scan IS '{package_info[2]}'; "
+    try:
+        check_out_cursor = sqlite_connection.cursor()
+        sql_expression = f"UPDATE package_log SET check_out_time = CURRENT_TIMESTAMP, package_status = 1 WHERE check_out_time IS NULL AND barcode_scan IS '{package_info[2]}'; "
 
-    #check_out_cursor.execute("SELECT * FROM package_log WHERE check_out_time IS NULL AND check_in_time=? AND apartment=? ", (barcode,))
-    check_out_cursor.execute(sql_expression)
-    sqlite_connection.commit()
-    return True
+        check_out_cursor.execute(sql_expression)
+        sqlite_connection.commit()
+        return True
+
+    except Exception as exception_message:
+        error_logging(repr(exception_message))
+        return False
+
+def mark_as_error(package_info, status_update):
+    try:
+        check_out_cursor = sqlite_connection.cursor()
+        sql_expression = f"UPDATE package_log SET check_out_time = CURRENT_TIMESTAMP, package_status = {status_update} WHERE check_out_time IS NULL AND barcode_scan IS '{package_info[2]}'; "
+
+        check_out_cursor.execute(sql_expression)
+        sqlite_connection.commit()
+        return True
+
+    except Exception as exception_message:
+        error_logging(repr(exception_message))
+        return False
+
 
 def db_search_on_hand(search_dict):
     sql_search_expression = f"SELECT * FROM package_log WHERE apartment = '{search_dict['apartment'].upper()}' AND package_status = 0 ORDER BY check_in_time; "
+    if search_dict['apartment'].upper() == '':
+        sql_search_expression = "SELECT * FROM package_log WHERE package_status = 0 ORDER BY apartment, check_in_time; "
     search_cursor = sqlite_connection.cursor()
     search_cursor.execute(sql_search_expression)
     #output_temp_file(search_cursor)
@@ -101,29 +118,6 @@ def db_search_on_hand(search_dict):
         formatted_row = [row[0], row[3], row[4], row[2]]
         results_list.append(formatted_row)
     return results_list
-
-def db_search_old_unused(search_dict):         #check_in_time, check_out_time, delivered_by, apartment, barcode_scan, package_status:
-    sql_search_expression = "SELECT * FROM package_log WHERE "
-    search_cursor = sqlite_connection.cursor()
-
-    #generate sql query
-    for key in search_dict:
-        if search_dict[key] != '':
-            if key == "check_in_time" or key == "check_out_time":
-                #format dates for query
-                sql_search_expression+= 'date(' + key + ") = '" + str(search_dict[key]) + "' AND "
-            else:
-                sql_search_expression+= key + " = '" + str(search_dict[key]) + "' AND "
-
-    # sql_search_expression = sql_search_expression[:-4]
-    search_cursor.execute(sql_search_expression[:-4])
-    #output_temp_file(search_cursor)
-    results_list = []
-    for row in search_cursor:
-        formatted_row = [row[0], row[3], row[4], row[2]]
-        results_list.append(formatted_row)
-    return results_list
-
 
 def db_manual_report(report_dict):
     sql_report_expression = "SELECT * FROM package_log WHERE "
@@ -142,14 +136,16 @@ def db_manual_report(report_dict):
                 sql_report_expression += key + " = '" + str(report_dict[key]) + "' AND "
 
     sql_report_expression = sql_report_expression[:-4] + 'ORDER BY apartment'
-    print(sql_report_expression)
+
+    # if report_dict['check_in_time_start'] == '' and
+    if not any(report_dict.values()):
+        sql_report_expression = "SELECT * FROM package_log ORDER BY apartment; "
     report_cursor.execute(sql_report_expression)
     results_list = []
     for row in report_cursor:
         formatted_row = [row[3], row[0], row[1], row[2], status_dict[row[5]]]
         results_list.append(formatted_row)
     return results_list
-    #output_temp_file(report_cursor)
 
 
 def count_received_by_apartment_date_range(count_dict):
@@ -159,6 +155,7 @@ def count_received_by_apartment_date_range(count_dict):
         , COUNT(package_status) FILTER (WHERE package_status = 0) AS Onhand
         , COUNT(package_status) FILTER (WHERE package_status = 1) AS Delivered
         , COUNT(package_status) FILTER (WHERE package_status = 2) AS Missing
+        , COUNT(package_status) FILTER (WHERE package_status = 3) AS Mistake
         FROM package_log WHERE date(check_in_time) BETWEEN '{count_dict['check_in_time_start']}' AND '{count_dict['check_in_time_end']}' GROUP BY apartment ORDER BY apartment; '''
     else:
         sql_count_expression = f'''SELECT apartment
@@ -166,14 +163,14 @@ def count_received_by_apartment_date_range(count_dict):
         , COUNT(package_status) FILTER (WHERE package_status = 0) AS Onhand
         , COUNT(package_status) FILTER (WHERE package_status = 1) AS Delivered
         , COUNT(package_status) FILTER (WHERE package_status = 2) AS Missing
+        , COUNT(package_status) FILTER (WHERE package_status = 3) AS Mistake
         FROM package_log WHERE apartment IS '{count_dict['apartment']}' AND date(check_in_time) BETWEEN '{count_dict['check_in_time_start']}' AND '{count_dict['check_in_time_end']}' GROUP BY apartment ORDER BY apartment; '''
     function_cursor = sqlite_connection.cursor()
     function_cursor.execute(sql_count_expression)
-    #output_temp_file(function_cursor)
     results_list = []
 
     for row in function_cursor:
-        formatted_row = [row[0], row[2], row[3], row[4], row[1]]
+        formatted_row = [row[0], row[2], row[3], row[4], row[5], row[1]]
         results_list.append(formatted_row)
     return results_list
 
@@ -185,6 +182,7 @@ def all_onhand_count(count_all_status):
             , COUNT(package_status) FILTER (WHERE package_status = 0) AS Onhand
             , COUNT(package_status) FILTER (WHERE package_status = 1) AS Delivered
             , COUNT(package_status) FILTER (WHERE package_status = 2) AS Missing
+            , COUNT(package_status) FILTER (WHERE package_status = 3) AS Mistake
             FROM package_log GROUP BY apartment ORDER BY apartment; '''
     else:
         sql_count_expression = f'''SELECT apartment
@@ -198,24 +196,12 @@ def all_onhand_count(count_all_status):
     results_list = []
     for row in function_cursor:
         if count_all_status:
-            formatted_row = [row[0], row[2], row[3], row[4], row[1]]
+            formatted_row = [row[0], row[2], row[3], row[4], row[5], row[1]]
         else:
-            formatted_row = [row[0], row[2], '', '', row[1]]
+            formatted_row = [row[0], row[2], '', '', '', row[1]]
         results_list.append(formatted_row)
     return results_list
 
-def output_temp_file(function_cursor):
-    temp_file_name = 'temp/' + str(int(time.time())) + '.csv'
-    search_file_path = os.path.abspath(temp_file_name)
-    with open(temp_file_name, 'w', newline='') as out_csv_file:
-        csv_out = csv.writer(out_csv_file)
-        csv_out.writerow(d[0] for d in function_cursor.description)
-        for row in function_cursor:
-            csv_out.writerow(row)
-
-    # os.system(search_file_path)
-    print(search_file_path)
-    subprocess.Popen("start " + search_file_path, shell=True)
 
 def save_report(headers, data, file_name):
     #file_name = f"{directory}/{str(int(time.time()))}.csv"
@@ -227,18 +213,3 @@ def save_report(headers, data, file_name):
             csv_out.writerow(row)
     print(start_file_name)
     subprocess.Popen(start_file_name, shell=True)
-
-
-
-def make_test_entries():
-    carriers_dict = {0: 'Amazon',
-                     1: 'Fedex',
-                     2: 'US Postal',
-                     3: 'DHL',
-                     4: 'UPS',
-                     5: 'Other'
-                     }
-    for i in range(10000):
-        package_info = dict(apartment=random.randint(1,3000), delivered_by=carriers_dict[random.randint(0,5)], barcode_scan=i,
-                            package_status=random.randint(0,2))
-        check_in(package_info)
