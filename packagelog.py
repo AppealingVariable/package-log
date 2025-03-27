@@ -12,7 +12,7 @@ import subprocess
 
 #GLOBAL VARIABLES
 db_name = 'package-log.db'
-tb_create = """CREATE TABLE package_log(check_in_time DATETIME DEFAULT CURRENT_TIMESTAMP, check_out_time TIMESTAMP, delivered_by TEXT, apartment TEXT, barcode_scan TEXT, package_status INT)"""
+tb_create = """CREATE TABLE package_log(check_in_time DATETIME DEFAULT (DATETIME(CURRENT_TIMESTAMP, 'LOCALTIME')), check_out_time TIMESTAMP, delivered_by TEXT, apartment TEXT, barcode_scan TEXT, package_status INT)"""
 
 sqlite_connection = sqlite3.connect(db_name)
 cursor = sqlite_connection.cursor()
@@ -204,12 +204,10 @@ def all_onhand_count(count_all_status):
 
 
 def save_report(headers, data, file_name):
-    #file_name = f"{directory}/{str(int(time.time()))}.csv"
     start_file_name = f'"{file_name}"'
     with open(file_name, 'w', newline='') as out_csv_file:
         csv_out = csv.writer(out_csv_file)
         csv_out.writerow(headers)
         for row in data:
             csv_out.writerow(row)
-    print(start_file_name)
     subprocess.Popen(start_file_name, shell=True)
