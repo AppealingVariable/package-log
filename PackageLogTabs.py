@@ -1,13 +1,8 @@
 import FreeSimpleGUI as sg
 import packagelog
 import os
+import SendEmailReports
 
-
-def return_carrier_value(values):
-    pass
-
-def get_tab_name():
-    pass
 
 def error_message(message):
     error_font_settings = ('arial', 25, 'bold')
@@ -22,23 +17,39 @@ def filter_read_dict(values):
                      if str(key).startswith(tab)}
     return filtered_dict
 
+def save_report_as(headers, data):
+    save_file_path = sg.popup_get_file(message="Choose where to save report",
+                                       default_path=f'Report {packagelog.time_string()}',
+                                       no_window=True,
+                                       save_as=True,
+                                       file_types=(('*.csv', "ALL Files"),),
+                                       initial_folder=os.path.expanduser('~/Documents/'),
+                                       default_extension='.csv'
+                                       )
+    if save_file_path is not None and save_file_path != '':
+        packagelog.save_report(headers=headers, data=data, file_name=save_file_path)
+        sg.popup_quick_message("File Saved", background_color="white", text_color='black')
+
 class CheckIn:
     def __init__(self):
         self.tab_key = 'check_in_tab'
         self.tab_title = 'Check In'
         self.focus = self.tab_key + 'apartment'
         self.return_bind = self.tab_key + 'return_bind'
+        self.input_size = (10, 1)
+        self.column_l = [[sg.Text('Apartment Number'), sg.Push(), sg.Input(key=self.tab_key + 'apartment', size=self.input_size)],
+                         [sg.Text('Number of Packages'), sg.Push(), sg.Input(key=self.tab_key + 'package_count', default_text='1', size=self.input_size)]]
+        self.column_r = [[sg.Text('Carrier')],
+                         [sg.Radio(text='Amazon', group_id=self.tab_key + 'radio', key=self.tab_key + 'Amazon')],
+                         [sg.Radio(text='FedEx', group_id=self.tab_key + 'radio', key=self.tab_key + 'FedEx')],
+                         [sg.Radio(text='US Postal', group_id=self.tab_key + 'radio', key=self.tab_key + 'US Postal')],
+                         [sg.Radio(text='DHL', group_id=self.tab_key + 'radio', key=self.tab_key + 'DHL')],
+                         [sg.Radio(text='UPS', group_id=self.tab_key + 'radio', key=self.tab_key + 'UPS')],
+                         [sg.Radio(text='Other', group_id=self.tab_key + 'radio', key=self.tab_key + 'Other',
+                                   default=True), ]]
         self.layout = [[sg.Text('Check In')],
-                   [sg.Text('Carrier')],
-                   [sg.Radio(text='Amazon', group_id=self.tab_key + 'radio', key=self.tab_key + 'Amazon')],
-                   [sg.Radio(text='FedEx', group_id=self.tab_key + 'radio', key=self.tab_key + 'FedEx')],
-                   [sg.Radio(text='US Postal', group_id=self.tab_key + 'radio', key=self.tab_key + 'US Postal')],
-                   [sg.Radio(text='DHL', group_id=self.tab_key + 'radio', key=self.tab_key + 'DHL')],
-                   [sg.Radio(text='UPS', group_id=self.tab_key + 'radio', key=self.tab_key + 'UPS')],
-                   [sg.Radio(text='Other', group_id=self.tab_key + 'radio', key=self.tab_key + 'Other', default=True),],
-                   [sg.Text('Apartment Number'), sg.Input(key=self.tab_key + 'apartment'), sg.Push()],
-                   [sg.Text('Number of Packages'),sg.Input(key=self.tab_key + 'package_count', default_text='1'), sg.Push()],
-                   [sg.Button(button_text='Check In', key=self.tab_key + 'return_bind'), sg.Exit()]]
+                       [sg.vtop(sg.Column(self.column_l)), sg.Column(self.column_r)],
+                       [sg.Button(button_text='Check In', key=self.tab_key + 'return_bind')]]
 
 
 
@@ -101,8 +112,6 @@ class CheckOut:
 
     def check_out_gui(self, window, event, filtered_values):
 
-        #window[self.tab_key + 'apartment'].set_focus()
-
         if event == self.tab_key + 'return_bind':       #load list
             if filtered_values['apartment'] != '':
                 self.data = packagelog.db_search_on_hand(filtered_values)
@@ -148,10 +157,20 @@ class OnHandSearch:
                             display_row_numbers=False,
                             num_rows=20,
                             key=self.tab_key + 'table')],
-                  [sg.Text('Total'), sg.Text('0', key=self.tab_key + 'total_value')]
+                  [sg.Text('Total'), sg.Text('0', key=self.tab_key + 'total_value')],
+                       [sg.Button(button_text='Save Report', key=self.tab_key + 'Save Report'),
+                        sg.Button(button_text='Email Report', key=self.tab_key + 'Email Report'),
+                        sg.Text(f'Email to {SendEmailReports.default_to_email}')]
                   ]
 
     def on_hand_search_gui(self, window, event, filtered_values):
+
+        if event == self.tab_key + 'Email Report':
+            SendEmailReports.save_then_email(headers=self.headings, data=self.data)
+            sg.popup_quick_message("Email Sent", background_color="white", text_color='black')
+
+        if event == self.tab_key + 'Save Report':
+            save_report_as(headers=self.headings, data=self.data)
 
         if event == self.tab_key + 'return_bind':
             self.data = packagelog.db_search_on_hand(filtered_values)
@@ -166,12 +185,14 @@ class CountsByDate:
         self.tab_title = 'Counts by Date'
         self.data = []
         self.headings = ['Apartment', 'Onhand', 'Delivered', 'Missing', 'Mistake', 'Total']
+        self.column_l = [[sg.CalendarButton(button_text='Check In Date Start', format="%Y-%m-%d", key='date_dummy'), sg.Push(), sg.Input(key=self.tab_key + 'check_in_time_start', default_text=packagelog.today_date_string())],
+                         [sg.CalendarButton(button_text='Check In Date End', format="%Y-%m-%d", key='date_dummy'), sg.Push(), sg.Input(key=self.tab_key + 'check_in_time_end', default_text=packagelog.today_date_string())],
+                         [sg.Text('Apartment Number'), sg.Push(), sg.Input(key=self.tab_key + 'apartment')],]
+        self.column_r = [[],
+                         [],
+                         [],]
         self.layout = [[sg.Text('Counts by apartment, leave apartment blank to view all')],
-                  [sg.CalendarButton(button_text='Check In Date Start', format="%Y-%m-%d", key='date_dummy'),
-                   sg.Input(key=self.tab_key + 'check_in_time_start', default_text=packagelog.today_date_string())],
-                  [sg.CalendarButton(button_text='Check In Date End', format="%Y-%m-%d", key='date_dummy'),
-                   sg.Input(key=self.tab_key + 'check_in_time_end', default_text=packagelog.today_date_string())],
-                  [sg.Text('Apartment Number'), sg.Input(key=self.tab_key + 'apartment')],
+                  [sg.Column(self.column_l)],
                   [sg.Button(button_text='Load List', key=self.tab_key + 'return_bind', bind_return_key=True)],
                   [sg.Table(values=self.data, headings=self.headings, def_col_width=30, max_col_width=50,
                             background_color='darkblue',
@@ -180,10 +201,13 @@ class CountsByDate:
                             justification="left",
                             num_rows=20,
                             key=self.tab_key + 'table')],
-                  [sg.Button(button_text='Save Report', key=self.tab_key + 'Save Report')]
+                  [sg.Button(button_text='Save Report', key=self.tab_key + 'Save Report'), sg.Button(button_text='Email Report', key=self.tab_key + 'Email Report'), sg.Text(f'Email to {SendEmailReports.default_to_email}')]
                   ]
-
     def counts_by_date_gui(self, window, event, filtered_values):
+
+        write_file_headers = self.headings[:]
+        write_file_headers.extend(
+            [f"Start {filtered_values['check_in_time_start']}", f"End {filtered_values['check_in_time_end']}"])
         if event == self.tab_key + 'return_bind':
             if filtered_values['check_in_time_start'] == '' or filtered_values['check_in_time_end'] == '':
                 sg.popup('Please choose date range')
@@ -194,23 +218,13 @@ class CountsByDate:
                 self.data = packagelog.count_received_by_apartment_date_range(package_info)
                 window[self.tab_key + 'table'].update(values=self.data)
 
+        if event == self.tab_key + 'Email Report':
+            SendEmailReports.save_then_email(headers=write_file_headers, data=self.data)
+            sg.popup_quick_message("Email Sent", background_color="white", text_color='black')
+
         if event == self.tab_key + 'Save Report':
-            write_file_headers = self.headings[:]
-            write_file_headers.extend(
-                [f"Start {filtered_values['check_in_time_start']}", f"End {filtered_values['check_in_time_end']}"])
+            save_report_as(headers=write_file_headers, data=self.data)
 
-            save_file_name = sg.popup_get_file(message="Choose where to save report",
-                                               default_path=f'Report {packagelog.time_string()}',
-                                               no_window=True,
-                                               save_as=True,
-                                               file_types=(('*.csv', "ALL Files"),),
-                                               initial_folder=os.path.expanduser('~/Documents/'),
-                                               default_extension='.csv'
-                                               )
-
-            if save_file_name is not None and save_file_name != '':
-                packagelog.save_report(headers=write_file_headers, data=self.data, file_name=save_file_name)
-                sg.popup_quick_message("File Saved", background_color="white", text_color='black')
 
 class MarkMistakeMissing:
     def __init__(self):
@@ -266,29 +280,31 @@ class ManualReports:
         self.tab_title = 'Manual Reports'
         self.data = []
         self.headings = ['Apartment', 'Check In Time', 'Check Out Time', 'Carrier', 'Status']
-        self.layout = [[sg.Text('Manual Reports')],
-                       [sg.Text('Carrier')],
+        self.input_size = (10, 1)
+        self.column_l =[[sg.Text('Apartment Number'), sg.Push(), sg.Input(key=self.tab_key + 'apartment', size=self.input_size)],
+                       [sg.Text('Barcode'), sg.Push(), sg.Input(key=self.tab_key + 'barcode_scan', size=self.input_size)],
+                       [sg.CalendarButton(button_text='Check In Date Start', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
+                        sg.Push(), sg.Input(key=self.tab_key + 'check_in_time_start', size=self.input_size)],
+                       [sg.CalendarButton(button_text='Check In Date End', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
+                        sg.Push(), sg.Input(key=self.tab_key + 'check_in_time_end', size=self.input_size)],
+                       [sg.CalendarButton(button_text='Check Out Date Start', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
+                        sg.Push(), sg.Input(key=self.tab_key + 'check_out_time_start', size=self.input_size)],
+                       [sg.CalendarButton(button_text='Check Out Date End', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
+                        sg.Push(), sg.Input(key=self.tab_key + 'check_out_time_end', size=self.input_size)],
+                       [sg.Text('Package Status'), sg.Push(),
+                        sg.Combo(['Checked In', 'Checked Out', 'Missing', 'Mistake', 'All'], default_value='All',
+                                 readonly=True,
+                                 key=self.tab_key + 'status', size=self.input_size)],]
+        self.column_r = [[sg.Text('Carrier')],
                        [sg.Radio(text='Amazon', group_id=self.tab_key + 'radio', key=self.tab_key + 'Amazon')],
                        [sg.Radio(text='FedEx', group_id=self.tab_key + 'radio', key=self.tab_key + 'FedEx')],
                        [sg.Radio(text='US Postal', group_id=self.tab_key + 'radio', key=self.tab_key + 'US Postal')],
                        [sg.Radio(text='DHL', group_id=self.tab_key + 'radio', key=self.tab_key + 'DHL')],
                        [sg.Radio(text='UPS', group_id=self.tab_key + 'radio', key=self.tab_key + 'UPS')],
                        [sg.Radio(text='Other', group_id=self.tab_key + 'radio', key=self.tab_key + 'Other')],
-                       [sg.Radio(text='All', group_id=self.tab_key + 'radio', key=self.tab_key + 'All', default=True)],
-                       [sg.Text('Apartment Number'), sg.Input(key=self.tab_key + 'apartment')],
-                       [sg.Text('Barcode'), sg.Input(key=self.tab_key + 'barcode_scan')],
-                       [sg.CalendarButton(button_text='Check In Date Start', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
-                        sg.Input(key=self.tab_key + 'check_in_time_start')],
-                       [sg.CalendarButton(button_text='Check In Date End', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
-                        sg.Input(key=self.tab_key + 'check_in_time_end')],
-                       [sg.CalendarButton(button_text='Check Out Date Start', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
-                        sg.Input(key=self.tab_key + 'check_out_time_start')],
-                       [sg.CalendarButton(button_text='Check Out Date End', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
-                        sg.Input(key=self.tab_key + 'check_out_time_end')],
-                       [sg.Text('Package Status'),
-                        sg.Combo(['Checked In', 'Checked Out', 'Missing', 'Mistake', 'All'], default_value='All',
-                                 readonly=True,
-                                 key=self.tab_key + 'status')],
+                       [sg.Radio(text='All', group_id=self.tab_key + 'radio', key=self.tab_key + 'All', default=True)],]
+        self.layout = [[sg.Text('Manual Reports')],
+                       [sg.Column(self.column_l), sg.Column(self.column_r)],
                        [sg.Button(button_text='Load list', key=self.tab_key + 'return_bind')],
                        [sg.Table(values=self.data, headings=self.headings, def_col_width=20, max_col_width=50,
                                  background_color='darkblue',
@@ -298,7 +314,7 @@ class ManualReports:
                                  num_rows=20,
                                  key=self.tab_key + 'table')],
                        [sg.Text('Total'), sg.Text('0', key=self.tab_key + 'total_value')],
-                       [sg.Button(button_text='Save Report', key=self.tab_key + 'Save Report')]]
+                       [sg.Button(button_text='Save Report', key=self.tab_key + 'Save Report'), sg.Button(button_text='Email Report', key=self.tab_key + 'Email Report'), sg.Text(f'Email to {SendEmailReports.default_to_email}')]]
 
 
 
@@ -309,20 +325,13 @@ class ManualReports:
                                  'Mistake': 3,
                                  'All': ''}
 
+        if event == self.tab_key + 'Email Report':
+            SendEmailReports.save_then_email(headers=self.headings, data=self.data)
+            sg.popup_quick_message("Email Sent", background_color="white", text_color='black')
 
         if event == self.tab_key + 'Save Report':
-            save_file_name = sg.popup_get_file(message="Choose where to save report",
-                                               default_path=f'Report {packagelog.time_string()}',
-                                               no_window=True,
-                                               save_as=True,
-                                               file_types=(('*.csv', "ALL Files"),),
-                                               initial_folder=os.path.expanduser('~/Documents/'),
-                                               default_extension='.csv'
-                                               )
+            save_report_as(headers=self.headings, data=self.data)
 
-            if save_file_name is not None and save_file_name != '':
-                packagelog.save_report(headers=self.headings, data=self.data, file_name=save_file_name)
-                sg.popup_quick_message("File Saved", background_color="white", text_color='black')
 
         if event == self.tab_key + 'return_bind':
             carrier_value = ''
@@ -340,7 +349,6 @@ class ManualReports:
                                 delivered_by=carrier_value,
                                 barcode_scan=filtered_values['barcode_scan'],
                                 package_status=combo_dict_conversion[filtered_values['status']])
-            print(package_info)
             self.data = packagelog.db_manual_report(package_info)
             window[self.tab_key + 'table'].update(values=self.data)
             window[self.tab_key + 'total_value'].update(value=len(self.data))
@@ -361,7 +369,7 @@ class AllCounts:
                                  justification="left",
                                  num_rows=20,
                                  key=self.tab_key + 'table')],
-                       [sg.Button(button_text='Save Report', key=self.tab_key + 'Save Report'), sg.Input(key=self.tab_key + 'apartment', visible=False)]
+                       [sg.Button(button_text='Save Report', key=self.tab_key + 'Save Report'), sg.Input(key=self.tab_key + 'apartment', visible=False), sg.Button(button_text='Email Report', key=self.tab_key + 'Email Report'), sg.Text(f'Email to {SendEmailReports.default_to_email}')]
                        ]
 
     def count_all_gui(self, window, event, filtered_values):
@@ -374,22 +382,9 @@ class AllCounts:
             self.data = packagelog.all_onhand_count(count_all_status=True)
             window[self.tab_key + 'table'].update(values=self.data)
 
-        if event == 'Load Missing Counts':
-            pass
-
-        if event == 'Load Delivered Counts':
-            pass
+        if event == self.tab_key + 'Email Report':
+            SendEmailReports.save_then_email(headers=self.headings, data=self.data)
+            sg.popup_quick_message("Email Sent", background_color="white", text_color='black')
 
         if event == self.tab_key + 'Save Report':
-            save_file_name = sg.popup_get_file(message="Choose where to save report",
-                                               default_path=f'Report {packagelog.time_string()}',
-                                               no_window=True,
-                                               save_as=True,
-                                               file_types=(('*.csv', "ALL Files"),),
-                                               initial_folder=os.path.expanduser('~/Documents/'),
-                                               default_extension='.csv'
-                                               )
-
-            if save_file_name is not None and save_file_name != '':
-                packagelog.save_report(headers=self.headings, data=self.data, file_name=save_file_name)
-                sg.popup_quick_message("File Saved", background_color="white", text_color='black')
+            save_report_as(headers=self.headings, data=self.data)

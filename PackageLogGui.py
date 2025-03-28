@@ -1,6 +1,5 @@
 import FreeSimpleGUI as sg
 import packagelog
-import os
 import PackageLogTabs
 
 
@@ -28,18 +27,13 @@ def main_menu():
                            key="tab",
                            enable_events=True)]]
 
-    #layout = [[sg.Button('Manual Check In'), sg.Button('Manual Check Out'), sg.Button('On Hand Search'), sg.Button('Manual Reports'), sg.Button('Counts by Check in Date'), sg.Button('All Counts'), sg.Button('Mark As Mistake or Missing'), sg.Exit() ]]
     window = sg.Window('Package Log Main Menu', layout, use_ttk_buttons=True, resizable=True).Finalize()
-    #window.Maximize()
-    #set_return_bind_tab(window, current_tab + 'return_bind')
 
     current_return_bind = window['tab'].find_currently_active_tab_key() + 'return_bind'
-    #current_focus = window['tab'].find_currently_active_tab_key().focus
     window.write_event_value('tab', check_in_obj.tab_key)
-    #print(current_focus)
+
     while True:                             # The Event Loop
         event, values = window.read()
-        #print(event, values)
 
         if event == sg.WIN_CLOSED or event == 'Exit':
             packagelog.db_close()

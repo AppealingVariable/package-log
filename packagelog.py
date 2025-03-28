@@ -203,11 +203,14 @@ def all_onhand_count(count_all_status):
     return results_list
 
 
-def save_report(headers, data, file_name):
+def save_report(headers, data, file_name, send_email=False):
     start_file_name = f'"{file_name}"'
     with open(file_name, 'w', newline='') as out_csv_file:
         csv_out = csv.writer(out_csv_file)
         csv_out.writerow(headers)
         for row in data:
             csv_out.writerow(row)
-    subprocess.Popen(start_file_name, shell=True)
+    if not send_email:
+        subprocess.Popen(start_file_name, shell=True)
+    else:
+        return start_file_name
