@@ -2,6 +2,7 @@ import FreeSimpleGUI as sg
 import packagelog
 import os
 
+
 def return_carrier_value(values):
     pass
 
@@ -34,9 +35,9 @@ class CheckIn:
                    [sg.Radio(text='US Postal', group_id=self.tab_key + 'radio', key=self.tab_key + 'US Postal')],
                    [sg.Radio(text='DHL', group_id=self.tab_key + 'radio', key=self.tab_key + 'DHL')],
                    [sg.Radio(text='UPS', group_id=self.tab_key + 'radio', key=self.tab_key + 'UPS')],
-                   [sg.Radio(text='Other', group_id=self.tab_key + 'radio', key=self.tab_key + 'Other', default=True), ],
-                   [sg.Text('Apartment Number'), sg.Input(key=self.tab_key + 'apartment', focus=True)],
-                   [sg.Text('Number of Packages'), sg.Input(key=self.tab_key + 'package_count', default_text='1')],
+                   [sg.Radio(text='Other', group_id=self.tab_key + 'radio', key=self.tab_key + 'Other', default=True),],
+                   [sg.Text('Apartment Number'), sg.Input(key=self.tab_key + 'apartment'), sg.Push()],
+                   [sg.Text('Number of Packages'),sg.Input(key=self.tab_key + 'package_count', default_text='1'), sg.Push()],
                    [sg.Button(button_text='Check In', key=self.tab_key + 'return_bind'), sg.Exit()]]
 
 
@@ -50,7 +51,7 @@ class CheckIn:
             for key in filtered_values:
                 if filtered_values[key] == True:
                     carrier_value = key
-                    print(carrier_value)
+
             filtered_values['barcode'] = 'MANUAL'
             if filtered_values['apartment'] != '' and carrier_value != '':
                 package_info = dict(apartment=filtered_values['apartment'].upper(), delivered_by=carrier_value,
@@ -218,7 +219,7 @@ class MarkMistakeMissing:
         self.data = []
         self.headings = ['Check in time', 'Apartment', 'Barcode', 'Carrier']
         self.layout = [[sg.Text('Mark As Mistake')],
-                  [sg.Button(button_text='Load list', key=self.tab_key + 'return_bind', bind_return_key=True), sg.Text('Apartment'), sg.Input(key=self.tab_key + 'apartment')],
+                  [sg.Button(button_text='Load list', key=self.tab_key + 'return_bind'), sg.Text('Apartment'), sg.Input(key=self.tab_key + 'apartment')],
                   [sg.Table(values=self.data, headings=self.headings, def_col_width=30, max_col_width=50,
                             background_color='darkblue',
                             auto_size_columns=False,
@@ -230,18 +231,19 @@ class MarkMistakeMissing:
 
     def mark_as_error_gui(self, window, event, filtered_values):
         if event == self.tab_key + 'return_bind':
-            data = packagelog.db_search_on_hand(filtered_values)
-            window[self.tab_key + 'table'].update(values=data)
+            if filtered_values['apartment'] == '':
+                sg.popup('Please enter apartment number')
+            else:
+                self.data = packagelog.db_search_on_hand(filtered_values)
+                window[self.tab_key + 'table'].update(values=self.data)
         if event == self.tab_key + 'Mark As Mistake' or event == self.tab_key + 'Mark As Missing':
             row_count = 0
             error_count = 0
-            if event == 'Mark As Missing':
+            if event == self.tab_key + 'Mark As Missing':
                 status_change = 2
             else:
                 status_change = 3
-            print(len(filtered_values['table']))
             for row in filtered_values['table']:
-                print(row)
                 if not packagelog.mark_as_error(package_info=self.data[row], status_update=status_change):
                     error_message(
                         f"Package {self.data[row]} status not updated. Please try again and report to IT if the error persists.")
@@ -252,9 +254,142 @@ class MarkMistakeMissing:
             if checked_out_count == 1:
                 package_plural = 'package'
             sg.popup_quick_message(
-                f"{checked_out_count} {package_plural} marked {packagelog.status_dict[status_change]} for apartment {data[0][1]}",
+                f"{checked_out_count} {package_plural} marked {packagelog.status_dict[status_change]} for apartment {self.data[0][1]}",
                 background_color="white", text_color='black')
-            data = packagelog.db_search_on_hand(filtered_values)
-            window['-TABLE-'].update(values=data)
+            self.data = packagelog.db_search_on_hand(filtered_values)
+            window[self.tab_key + 'table'].update(values=self.data)
 
 
+class ManualReports:
+    def __init__(self):
+        self.tab_key = 'manual_reports'
+        self.tab_title = 'Manual Reports'
+        self.data = []
+        self.headings = ['Apartment', 'Check In Time', 'Check Out Time', 'Carrier', 'Status']
+        self.layout = [[sg.Text('Manual Reports')],
+                       [sg.Text('Carrier')],
+                       [sg.Radio(text='Amazon', group_id=self.tab_key + 'radio', key=self.tab_key + 'Amazon')],
+                       [sg.Radio(text='FedEx', group_id=self.tab_key + 'radio', key=self.tab_key + 'FedEx')],
+                       [sg.Radio(text='US Postal', group_id=self.tab_key + 'radio', key=self.tab_key + 'US Postal')],
+                       [sg.Radio(text='DHL', group_id=self.tab_key + 'radio', key=self.tab_key + 'DHL')],
+                       [sg.Radio(text='UPS', group_id=self.tab_key + 'radio', key=self.tab_key + 'UPS')],
+                       [sg.Radio(text='Other', group_id=self.tab_key + 'radio', key=self.tab_key + 'Other')],
+                       [sg.Radio(text='All', group_id=self.tab_key + 'radio', key=self.tab_key + 'All', default=True)],
+                       [sg.Text('Apartment Number'), sg.Input(key=self.tab_key + 'apartment')],
+                       [sg.Text('Barcode'), sg.Input(key=self.tab_key + 'barcode_scan')],
+                       [sg.CalendarButton(button_text='Check In Date Start', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
+                        sg.Input(key=self.tab_key + 'check_in_time_start')],
+                       [sg.CalendarButton(button_text='Check In Date End', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
+                        sg.Input(key=self.tab_key + 'check_in_time_end')],
+                       [sg.CalendarButton(button_text='Check Out Date Start', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
+                        sg.Input(key=self.tab_key + 'check_out_time_start')],
+                       [sg.CalendarButton(button_text='Check Out Date End', format="%Y-%m-%d", key=self.tab_key + 'date_dummy'),
+                        sg.Input(key=self.tab_key + 'check_out_time_end')],
+                       [sg.Text('Package Status'),
+                        sg.Combo(['Checked In', 'Checked Out', 'Missing', 'Mistake', 'All'], default_value='All',
+                                 readonly=True,
+                                 key=self.tab_key + 'status')],
+                       [sg.Button(button_text='Load list', key=self.tab_key + 'return_bind')],
+                       [sg.Table(values=self.data, headings=self.headings, def_col_width=20, max_col_width=50,
+                                 background_color='darkblue',
+                                 auto_size_columns=False,
+                                 display_row_numbers=False,
+                                 justification="left",
+                                 num_rows=20,
+                                 key=self.tab_key + 'table')],
+                       [sg.Text('Total'), sg.Text('0', key=self.tab_key + 'total_value')],
+                       [sg.Button(button_text='Save Report', key=self.tab_key + 'Save Report')]]
+
+
+
+    def manual_reports_gui(self, window, event, filtered_values):
+        combo_dict_conversion = {'Checked In': 0,
+                                 'Checked Out': 1,
+                                 'Missing': 2,
+                                 'Mistake': 3,
+                                 'All': ''}
+
+
+        if event == self.tab_key + 'Save Report':
+            save_file_name = sg.popup_get_file(message="Choose where to save report",
+                                               default_path=f'Report {packagelog.time_string()}',
+                                               no_window=True,
+                                               save_as=True,
+                                               file_types=(('*.csv', "ALL Files"),),
+                                               initial_folder=os.path.expanduser('~/Documents/'),
+                                               default_extension='.csv'
+                                               )
+
+            if save_file_name is not None and save_file_name != '':
+                packagelog.save_report(headers=self.headings, data=self.data, file_name=save_file_name)
+                sg.popup_quick_message("File Saved", background_color="white", text_color='black')
+
+        if event == self.tab_key + 'return_bind':
+            carrier_value = ''
+            for key in filtered_values:
+                if filtered_values[key] == True:
+                    carrier_value = key
+            if carrier_value == 'All':
+                carrier_value =''
+
+            package_info = dict(check_in_time_start=filtered_values['check_in_time_start'],
+                                check_in_time_end=filtered_values['check_in_time_end'],
+                                check_out_time_start=filtered_values['check_out_time_start'],
+                                check_out_time_end=filtered_values['check_out_time_end'],
+                                apartment=filtered_values['apartment'].upper(),
+                                delivered_by=carrier_value,
+                                barcode_scan=filtered_values['barcode_scan'],
+                                package_status=combo_dict_conversion[filtered_values['status']])
+            print(package_info)
+            self.data = packagelog.db_manual_report(package_info)
+            window[self.tab_key + 'table'].update(values=self.data)
+            window[self.tab_key + 'total_value'].update(value=len(self.data))
+
+
+class AllCounts:
+    def __init__(self):
+        self.tab_key = 'all_counts'
+        self.tab_title = 'Counts by Apartment'
+        self.data = []
+        self.headings = ['Apartment', 'Onhand', 'Delivered', 'Missing', 'Mistake', 'Total']
+        self.layout = [[sg.Text("Shows current counts of all records")],
+                       [sg.Button(button_text='Load Onhand Counts', key=self.tab_key + 'Load Onhand Counts'), sg.Button(button_text='Load All Counts', key=self.tab_key + 'return_bind')],
+                       [sg.Table(values=self.data, headings=self.headings, def_col_width=30, max_col_width=50,
+                                 background_color='darkblue',
+                                 auto_size_columns=False,
+                                 display_row_numbers=False,
+                                 justification="left",
+                                 num_rows=20,
+                                 key=self.tab_key + 'table')],
+                       [sg.Button(button_text='Save Report', key=self.tab_key + 'Save Report'), sg.Input(key=self.tab_key + 'apartment', visible=False)]
+                       ]
+
+    def count_all_gui(self, window, event, filtered_values):
+
+        if event == self.tab_key + 'Load Onhand Counts':
+            self.data = packagelog.all_onhand_count(count_all_status=False)
+            window[self.tab_key + 'table'].update(values=self.data)
+
+        if event == self.tab_key + 'return_bind':
+            self.data = packagelog.all_onhand_count(count_all_status=True)
+            window[self.tab_key + 'table'].update(values=self.data)
+
+        if event == 'Load Missing Counts':
+            pass
+
+        if event == 'Load Delivered Counts':
+            pass
+
+        if event == self.tab_key + 'Save Report':
+            save_file_name = sg.popup_get_file(message="Choose where to save report",
+                                               default_path=f'Report {packagelog.time_string()}',
+                                               no_window=True,
+                                               save_as=True,
+                                               file_types=(('*.csv', "ALL Files"),),
+                                               initial_folder=os.path.expanduser('~/Documents/'),
+                                               default_extension='.csv'
+                                               )
+
+            if save_file_name is not None and save_file_name != '':
+                packagelog.save_report(headers=self.headings, data=self.data, file_name=save_file_name)
+                sg.popup_quick_message("File Saved", background_color="white", text_color='black')
