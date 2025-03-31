@@ -3,21 +3,19 @@ from email.message import EmailMessage
 import packagelog
 from pathlib import Path
 import os
-import json
+import keyring as kr
 
-#edit email_info_example.json to have correct info and change name to email_info.json
-#alternatively, change info in MakeJSON.py and run it
-with open('email_info.json') as f:
-    json_string = json.load(f)
-email_dict = json.loads(json_string)
+#uncomment the #set_creds() function in the CredMan.py file and run it in the terminal to set email and password
+#also set the below information to appropriate values for your email provider
+def get_creds(email):
+    return kr.get_password("package_email", email)
 
-# Set up email account information (I was too lazy to replace everything with the dictionary info in the code
-email_address = email_dict['email_address']
-email_password = email_dict['email_password']
-smtp_server = email_dict["smtp_server"]
-smtp_port = email_dict["smtp_port"]
-default_to_email = email_dict['default_to_email']
-default_subject = email_dict['default_subject']
+email_address = 'example@example.com'
+email_password = get_creds(email_address) #if you don't want to use the keyring library, just replace this with a string
+smtp_server = 'smtp.example.com'
+smtp_port = 587
+default_to_email = 'example@example.com'
+default_subject = 'Package Report'
 #
 default_file_name = Path(os.path.expanduser('~')) / 'Documents' / f'Report_{packagelog.time_string()}.csv'
 
