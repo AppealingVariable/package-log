@@ -1,14 +1,11 @@
 import FreeSimpleGUI as sg
 import packagelog
 import PackageLogTabs
+from icon import icon_base64
 
-
-
-
+sg.set_options(font=('Arial Bold', 14), icon=icon_base64)
 def main_menu():
     packagelog.db_connect()
-    tab2_layout = [[sg.T('This is inside tab 2')],
-                   [sg.In(key='in')]]
     check_in_obj = PackageLogTabs.CheckIn()
     check_out_obj = PackageLogTabs.CheckOut()
     onhand_search_obj = PackageLogTabs.OnHandSearch()
