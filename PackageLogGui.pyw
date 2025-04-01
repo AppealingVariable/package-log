@@ -24,7 +24,7 @@ def main_menu():
 
     font_size_button = ['Font Size', ['Default', 'Small', 'Large', 'Extra Large']]
 
-    layout = [[sg.ButtonMenu(button_text='Font Size',menu_def=font_size_button, key='Font Size')],
+    layout = [[sg.ButtonMenu(button_text='Font Size',menu_def=font_size_button, key='Font Size'), sg.Button('Exit')],
               [sg.TabGroup(layout=[[sg.Tab(title=check_in_obj.tab_title, layout=check_in_obj.layout, key=check_in_obj.tab_key)],
                                    [sg.Tab(title=check_out_obj.tab_title, layout=check_out_obj.layout, key=check_out_obj.tab_key)],
                                    [sg.Tab(title=onhand_search_obj.tab_title, layout=onhand_search_obj.layout, key=onhand_search_obj.tab_key)],
