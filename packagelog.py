@@ -17,6 +17,8 @@ tb_create = """CREATE TABLE package_log(check_in_time DATETIME DEFAULT (DATETIME
 sqlite_connection = sqlite3.connect(db_name)
 cursor = sqlite_connection.cursor()
 
+is_linux = True
+
 status_dict = {
     0: "Checked In",
     1: "Checked Out",
@@ -211,6 +213,9 @@ def save_report(headers, data, file_name, send_email=False):
         for row in data:
             csv_out.writerow(row)
     if not send_email:
-        subprocess.Popen(start_file_name, shell=True)
+        if is_linux:
+            subprocess.Popen(f'libreoffice --calc {start_file_name}', shell=True)
+        else:
+            subprocess.Popen(start_file_name, shell=True)
     else:
         return start_file_name

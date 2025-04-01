@@ -194,7 +194,7 @@ class CountsByDate:
         self.layout = [[sg.Text('Counts by apartment, leave apartment blank to view all')],
                   [sg.Column(self.column_l)],
                   [sg.Button(button_text='Load List', key=self.tab_key + 'return_bind', bind_return_key=True)],
-                  [sg.Table(values=self.data, headings=self.headings, def_col_width=30, max_col_width=50,
+                  [sg.Table(values=self.data, headings=self.headings, def_col_width=18, max_col_width=50,
                             background_color='darkblue',
                             auto_size_columns=False,
                             display_row_numbers=False,
@@ -311,7 +311,7 @@ class ManualReports:
                                  auto_size_columns=False,
                                  display_row_numbers=False,
                                  justification="left",
-                                 num_rows=20,
+                                 num_rows=10,
                                  key=self.tab_key + 'table')],
                        [sg.Text('Total'), sg.Text('0', key=self.tab_key + 'total_value')],
                        [sg.Button(button_text='Save Report', key=self.tab_key + 'Save Report'), sg.Button(button_text='Email Report', key=self.tab_key + 'Email Report'), sg.Text(f'Email to {SendEmailReports.default_to_email}')]]
@@ -362,7 +362,7 @@ class AllCounts:
         self.headings = ['Apartment', 'Onhand', 'Delivered', 'Missing', 'Mistake', 'Total']
         self.layout = [[sg.Text("Shows current counts of all records")],
                        [sg.Button(button_text='Load Onhand Counts', key=self.tab_key + 'Load Onhand Counts'), sg.Button(button_text='Load All Counts', key=self.tab_key + 'return_bind')],
-                       [sg.Table(values=self.data, headings=self.headings, def_col_width=30, max_col_width=50,
+                       [sg.Table(values=self.data, headings=self.headings, def_col_width=18, max_col_width=50,
                                  background_color='darkblue',
                                  auto_size_columns=False,
                                  display_row_numbers=False,

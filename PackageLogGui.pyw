@@ -3,7 +3,15 @@ import packagelog
 import PackageLogTabs
 from icon import icon_base64
 
-sg.set_options(font=('Arial Bold', 14), icon=icon_base64)
+default_font_size = 14
+font_name = 'Arial Bold'
+font_size_dict = {'Default': default_font_size,
+                'Small': 10,
+                'Large': 20,
+                'Extra Large': 25,}
+
+sg.set_options(font=(font_name, default_font_size), icon=icon_base64)
+
 def main_menu():
     packagelog.db_connect()
     check_in_obj = PackageLogTabs.CheckIn()
@@ -14,7 +22,10 @@ def main_menu():
     man_reports_obj = PackageLogTabs.ManualReports()
     count_all_obj = PackageLogTabs.AllCounts()
 
-    layout = [[sg.TabGroup(layout=[[sg.Tab(title=check_in_obj.tab_title, layout=check_in_obj.layout, key=check_in_obj.tab_key)],
+    font_size_button = ['Font Size', ['Default', 'Small', 'Large', 'Extra Large']]
+
+    layout = [[sg.ButtonMenu(button_text='Font Size',menu_def=font_size_button, key='Font Size')],
+              [sg.TabGroup(layout=[[sg.Tab(title=check_in_obj.tab_title, layout=check_in_obj.layout, key=check_in_obj.tab_key)],
                                    [sg.Tab(title=check_out_obj.tab_title, layout=check_out_obj.layout, key=check_out_obj.tab_key)],
                                    [sg.Tab(title=onhand_search_obj.tab_title, layout=onhand_search_obj.layout, key=onhand_search_obj.tab_key)],
                                    [sg.Tab(title=counts_by_date_obj.tab_title, layout=counts_by_date_obj.layout, key=counts_by_date_obj.tab_key)],
@@ -25,17 +36,23 @@ def main_menu():
                            enable_events=True)]]
 
     window = sg.Window('Package Log Main Menu', layout, use_ttk_buttons=True, resizable=True).Finalize()
-
+    window.maximize()
     current_return_bind = window['tab'].find_currently_active_tab_key() + 'return_bind'
     window.write_event_value('tab', check_in_obj.tab_key)
 
     while True:                             # The Event Loop
         event, values = window.read()
+        print(event)
 
         if event == sg.WIN_CLOSED or event == 'Exit':
             packagelog.db_close()
             break
-
+        if event == 'Font Size':
+            print(values['Font Size'])
+            window.close()
+            del window
+            sg.set_options(font=(font_name, font_size_dict[values['Font Size']]))
+            main_menu()
         #change tab event
         if event == 'tab':
             current_return_bind = bind_return_set_focus(window, current_return_bind, window['tab'].find_currently_active_tab_key())
